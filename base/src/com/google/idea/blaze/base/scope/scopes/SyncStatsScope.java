@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The Bazel Authors. All rights reserved.
+ * Copyright 2019 The Bazel Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,21 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.idea.blaze.base.experiments;
+package com.google.idea.blaze.base.scope.scopes;
 
+import com.google.idea.blaze.base.logging.EventLoggingService;
+import com.google.idea.blaze.base.logging.utils.SyncStats;
 import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.scope.BlazeScope;
-import com.google.idea.common.experiments.ExperimentService;
 
-/** Reloads experiments at the start of the scope. */
-public class ExperimentScope implements BlazeScope {
-  @Override
-  public void onScopeBegin(BlazeContext context) {
-    ExperimentService.getInstance().startExperimentScope();
+/** Takes a {@link SyncStats.Builder} as input and logs the stats when the scope ends. */
+public class SyncStatsScope implements BlazeScope {
+
+  public final SyncStats.Builder stats;
+
+  public SyncStatsScope(SyncStats.Builder stats) {
+    this.stats = stats;
   }
 
   @Override
   public void onScopeEnd(BlazeContext context) {
-    ExperimentService.getInstance().endExperimentScope();
+    EventLoggingService.getInstance().log(stats.build());
   }
 }

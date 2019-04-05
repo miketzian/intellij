@@ -44,7 +44,6 @@ import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.io.FileOperationProvider;
 import com.google.idea.blaze.base.io.VirtualFileSystemProvider;
 import com.google.idea.blaze.base.issueparser.IssueOutputFilter;
-import com.google.idea.blaze.base.logging.EventLoggingService;
 import com.google.idea.blaze.base.logging.utils.SyncStats;
 import com.google.idea.blaze.base.model.BlazeLibrary;
 import com.google.idea.blaze.base.model.BlazeProjectData;
@@ -71,6 +70,7 @@ import com.google.idea.blaze.base.scope.scopes.IssuesScope;
 import com.google.idea.blaze.base.scope.scopes.NotificationScope;
 import com.google.idea.blaze.base.scope.scopes.PerformanceWarningScope;
 import com.google.idea.blaze.base.scope.scopes.ProgressIndicatorScope;
+import com.google.idea.blaze.base.scope.scopes.SyncStatsScope;
 import com.google.idea.blaze.base.scope.scopes.TimingScope;
 import com.google.idea.blaze.base.scope.scopes.TimingScope.EventType;
 import com.google.idea.blaze.base.scope.scopes.TimingScopeListener.TimedEvent;
@@ -151,8 +151,6 @@ final class BlazeSyncTask implements Progressive {
   private final boolean showPerformanceWarnings;
   private final SyncStats.Builder syncStats = SyncStats.builder();
 
-  private final List<TimedEvent> timedEvents = Collections.synchronizedList(new ArrayList<>());
-
   private BlazeSyncParams syncParams;
 
   BlazeSyncTask(Project project, BlazeImportSettings importSettings, BlazeSyncParams syncParams) {
@@ -166,7 +164,7 @@ final class BlazeSyncTask implements Progressive {
   @Override
   public void run(final ProgressIndicator indicator) {
     Scope.root(
-        (BlazeContext context) -> {
+        context -> {
           context.push(new ExperimentScope());
           if (showPerformanceWarnings) {
             context.push(new PerformanceWarningScope());
@@ -217,8 +215,9 @@ final class BlazeSyncTask implements Progressive {
   /** Returns true if sync successfully completed */
   @VisibleForTesting
   boolean syncProject(BlazeContext context) {
+    context.push(new SyncStatsScope(syncStats));
     TimingScope timingScope = new TimingScope("Sync", EventType.Other);
-    timingScope.addScopeListener(timedEvents::add);
+    timingScope.addScopeListener(events -> setTimingStats(syncStats, events));
     context.push(timingScope);
 
     long syncStartTime = System.currentTimeMillis();
@@ -264,7 +263,6 @@ final class BlazeSyncTask implements Progressive {
             .setSyncTitle(syncParams.title)
             .setTotalExecTimeMs(System.currentTimeMillis() - syncStartTime)
             .setSyncResult(syncResult);
-        EventLoggingService.getInstance().log(buildStats(syncStats));
       } catch (Exception e) {
         logSyncError(context, e);
       }
@@ -1038,18 +1036,13 @@ final class BlazeSyncTask implements Progressive {
     }
   }
 
-  private SyncStats buildStats(SyncStats.Builder stats) {
-    ImmutableList<TimedEvent> eventsCopy;
-    synchronized (timedEvents) {
-      eventsCopy = ImmutableList.copyOf(timedEvents);
-    }
+  private static void setTimingStats(SyncStats.Builder stats, ImmutableList<TimedEvent> events) {
     long blazeExecTime =
-        eventsCopy.stream()
+        events.stream()
             .filter(e -> e.isLeafEvent && e.type == EventType.BlazeInvocation)
             .mapToLong(e -> e.durationMillis)
             .sum();
     stats.setBlazeExecTimeMs(blazeExecTime);
-    stats.setTimedEvents(eventsCopy);
-    return stats.build();
+    stats.setTimedEvents(events);
   }
 }
