@@ -131,10 +131,6 @@ public class BlazeImportUtil {
    * view.
    */
   public static Predicate<ArtifactLocation> getShouldCreateFakeAarFilter(BlazeImportInput input) {
-    if (!input.createFakeAarLibrariesExperiment) {
-      return (it) -> Boolean.FALSE;
-    }
-
     ImportRoots importRoots =
         ImportRoots.builder(input.workspaceRoot, input.buildSystem)
             .add(input.projectViewSet)
